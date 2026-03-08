@@ -1,0 +1,56 @@
+{
+  "widget": {
+    "tooltip": "Screen Toolkit"
+  },
+  "panel": {
+    "title": "Screen Toolkit",
+    "running": "Running...",
+    "hint": "Select a tool above"
+  },
+  "tools": {
+    "colorpicker": "Color",
+    "annotate": "Annotate",
+    "ocr": "OCR",
+    "pin": "Pin",
+    "palette": "Palette",
+    "measure": "Measure",
+    "qr": "QR",
+    "lens": "Lens"
+  },
+  "messages": {
+    "picker-cancelled": "Color picker cancelled.",
+    "no-text": "No text detected.",
+    "no-qr": "No QR code detected.",
+    "lens-failed": "Google Lens upload failed.",
+    "capture-failed": "Screen capture failed.",
+    "pinned": "Pinned to screen.",
+    "palette-failed": "Palette extraction failed.",
+    "translate-failed": "Translation failed.",
+    "measure-saved": "Saved to ~/Pictures + copied.",
+    "measure-failed": "Screenshot failed.",
+    "measure-copied": "Measurement copied.",
+    "measure-pinned": "Pinned."
+  },
+  "color": {
+    "copyAll": "Copy All",
+    "history": "History"
+  },
+  "ocr": {
+    "result": "OCR Result",
+    "copy": "Copy Text",
+    "translate": "Translate"
+  },
+  "qr": {
+    "open": "Open URL",
+    "email": "Compose Email",
+    "copy": "Copy"
+  },
+  "palette": {
+    "cssVars": "Copy as CSS vars",
+    "hexList": "Copy hex list"
+  },
+  "settings": {
+    "ocrLanguages": "OCR Languages",
+    "deps": "System Dependencies"
+  }
+}

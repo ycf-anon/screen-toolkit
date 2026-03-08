@@ -1,0 +1,29 @@
+{
+  "id": "screen-toolkit",
+  "name": "Screen Toolkit",
+  "version": "1.2.5",
+  "minNoctaliaVersion": "4.5.0",
+  "author": "ycf-anon",
+  "license": "MIT",
+  "repository": "https://github.com/ycf-anon/screen-toolkit",
+  "description": "A set of tools for screen interaction: color picker, annotation, measurement, pin overlay, palette extraction, OCR with translation, QR scanner, and Google Lens search.",
+  "tags": ["Panel", "Bar", "Utility"],
+  "entryPoints": {
+    "main": "Main.qml",
+    "barWidget": "BarWidget.qml",
+    "controlCenterWidget": "ControlCenterWidget.qml",
+    "panel": "Panel.qml"
+  },
+  "dependencies": {
+    "plugins": []
+  },
+  "metadata": {
+    "defaultSettings": {
+      "colorHistory": [],
+      "paletteColors": [],
+      "installedLangs": ["eng"],
+      "transAvailable": false,
+      "selectedOcrLang": "eng"
+    }
+  }
+}
