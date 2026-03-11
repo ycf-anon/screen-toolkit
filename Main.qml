@@ -19,20 +19,40 @@ Item {
 
     readonly property string regionFile: "/tmp/screen-toolkit-region.txt"
 
+    // ── Settings shortcuts ────────────────────────────────────
     readonly property string selectedOcrLang: pluginApi?.pluginSettings?.selectedOcrLang || "eng"
 
     // ── Capability detection ──────────────────────────────────
-    // FIX: removed _capsDetected — Component.onCompleted only runs once, the guard was dead code
+    property bool _capsDetected: false
     property var _detectedLangs: []
 
-    Component.onCompleted: detectCapabilities()
+    Component.onCompleted: {
+        if (!_capsDetected) {
+            _capsDetected = true
+            detectCapabilities()
+        }
+    }
 
-    onPluginApiChanged: {
-        if (!pluginApi) return
-        pluginApi.pluginSettings.qrCapturePath = ""
-        pluginApi.pluginSettings.ocrCapturePath = ""
-        pluginApi.pluginSettings.colorCapturePath = ""
-        pluginApi.saveSettings()
+    // ── Bash helpers ──────────────────────────────────────────
+    // All shell commands are built here — one place to edit, easy to test.
+
+    function _grimRegionCmd(outFile) {
+        return "REGION=$(cat " + regionFile + ") || exit 1; " +
+               "grim -g \"$REGION\" " + outFile + " 2>/dev/null"
+    }
+
+    function _rmRegion() {
+        return "rm -f " + regionFile
+    }
+
+    // ── Generic slurp-tool launcher ───────────────────────────
+    // Replaces the 6 identical runXxx() bodies. Public named functions
+    // below keep the same API so Panel.qml and IPC are unaffected.
+    function _runSlurpTool(tool) {
+        if (root.isRunning) return
+        root.pendingTool = tool
+        root.isRunning = true
+        closeThenLaunch(launchSlurp)
     }
 
     // ── Processes ─────────────────────────────────────────────
@@ -40,7 +60,7 @@ Item {
     Process {
         id: detectLangsProc
         stdout: StdioCollector {}
-        onExited: (code) => {
+        onExited: {
             var lines = detectLangsProc.stdout.text.trim().split("\n")
             root._detectedLangs = []
             for (var i = 0; i < lines.length; i++) {
@@ -63,7 +83,7 @@ Item {
     Process {
         id: detectTransProc
         stdout: StdioCollector {}
-        onExited: (code) => {
+        onExited: {
             var path = detectTransProc.stdout.text.trim()
             if (pluginApi) {
                 pluginApi.pluginSettings.transAvailable = path !== "" && path.startsWith("/")
@@ -129,7 +149,7 @@ Item {
     Process {
         id: ocrProc
         stdout: StdioCollector {}
-        onExited: (code) => {
+        onExited: {
             root.isRunning = false
             var text = ocrProc.stdout.text.trim()
             if (text !== "") {
@@ -151,7 +171,7 @@ Item {
     Process {
         id: qrProc
         stdout: StdioCollector {}
-        onExited: (code) => {
+        onExited: {
             root.isRunning = false
             var result = qrProc.stdout.text.trim()
             if (result !== "") {
@@ -178,47 +198,26 @@ Item {
         }
     }
 
-    // FIX: race condition — annotateProc and annotateRegionProc ran concurrently but
-    // annotateProc.onExited was reading annotateRegionProc.stdout before it had finished.
-    // Now both signal completion and _tryShowAnnotate() only proceeds when both are done.
-    property bool _annotateImgDone: false
-    property bool _annotateRegionDone: false
-
-    function _tryShowAnnotate() {
-        if (!_annotateImgDone || !_annotateRegionDone) return
-        _annotateImgDone = false
-        _annotateRegionDone = false
-        root.isRunning = false
-        root.activeTool = ""
-        if (pluginApi) pluginApi.withCurrentScreen(screen => pluginApi.closePanel(screen))
-        var region = annotateRegionProc.stdout.text.trim()
-        Logger.i("ScreenToolkit", "annotate done, region=" + region)
-        annotateOverlay.parseAndShow(region, "/tmp/screen-toolkit-annotate.png")
-    }
-
     Process {
         id: annotateProc
         onExited: (code) => {
-            if (code !== 0) {
-                root.isRunning = false
+            root.isRunning = false
+            if (code === 0) {
                 root.activeTool = ""
-                _annotateImgDone = false
-                _annotateRegionDone = false
+                if (pluginApi) pluginApi.withCurrentScreen(screen => pluginApi.closePanel(screen))
+                var region = annotateRegionProc.stdout.text.trim()
+                Logger.i("ScreenToolkit", "annotate done, region=" + region)
+                annotateOverlay.parseAndShow(region, "/tmp/screen-toolkit-annotate.png")
+            } else {
+                root.activeTool = ""
                 ToastService.showError(pluginApi.tr("messages.capture-failed"))
-                return
             }
-            root._annotateImgDone = true
-            root._tryShowAnnotate()
         }
     }
 
     Process {
         id: annotateRegionProc
         stdout: StdioCollector {}
-        onExited: (code) => {
-            root._annotateRegionDone = true
-            root._tryShowAnnotate()
-        }
     }
 
     Process {
@@ -271,11 +270,11 @@ Item {
         id: translateProc
         property bool isTranslating: false
         stdout: StdioCollector {}
-        onExited: (code) => {
+        onExited: {
             translateProc.isTranslating = false
             var result = translateProc.stdout.text.trim()
             if (pluginApi) {
-                pluginApi.pluginSettings.translateResult = (code === 0 && result !== "")
+                pluginApi.pluginSettings.translateResult = (result !== "")
                     ? result
                     : pluginApi.tr("messages.translate-failed")
                 pluginApi.saveSettings()
@@ -283,6 +282,51 @@ Item {
         }
     }
 
+    Process { id: clipProc }
+
+    // ── Region file management ────────────────────────────────
+
+    Process {
+        id: clearRegionProc
+    }
+
+    // Slurp runs detached via systemd-run so it doesn't block the QML process.
+    // We poll for the output file rather than waiting on the process directly,
+    // because systemd-run exits immediately after spawning the unit.
+    Process {
+        id: slurpProc
+        onExited: (code) => {
+            Logger.i("ScreenToolkit", "slurpProc exited: " + code)
+            if (code !== 0) {
+                slurpPollTimer.stop()
+                root.isRunning = false
+                root.activeTool = ""
+            }
+        }
+    }
+
+    // Reads the region file and reports "ok", "cancel", or exits with code 1
+    // (file not ready yet). Single-purpose — easy to reason about.
+    Process {
+        id: slurpCheckProc
+        stdout: StdioCollector {}
+        onExited: (code) => {
+            if (code !== 0) return  // not ready yet — poll again
+            var result = slurpCheckProc.stdout.text.trim()
+            Logger.i("ScreenToolkit", "slurpCheck: " + result)
+            slurpPollTimer.stop()
+            root._slurpPollCount = 0
+            if (result === "cancel") {
+                root.isRunning = false
+                root.activeTool = ""
+            } else if (result === "ok") {
+                _dispatchPendingTool()
+            }
+        }
+    }
+
+    // Declared Process for record region-reading — replaces the old
+    // Qt.createQmlObject() dynamic allocation which could leak on early exit.
     Process {
         id: recordRegionProc
         stdout: StdioCollector {}
@@ -299,54 +343,30 @@ Item {
         }
     }
 
-    Process { id: clipProc }
-
     // ── Overlays ──────────────────────────────────────────────
-    Annotate  { id: annotateOverlay }
-    Measure   { id: measureOverlay; mainInstance: root }
-    Pin       { id: pinOverlay }
-    Record    { id: recordOverlay }
-    Mirror    { id: mirrorOverlay }
+
+    Annotate {
+        id: annotateOverlay
+    }
+
+    Measure {
+        id: measureOverlay
+        mainInstance: root
+    }
+
+    Pin {
+        id: pinOverlay
+    }
+
+    Record {
+        id: recordOverlay
+    }
+
+    Mirror {
+        id: mirrorOverlay
+    }
 
     readonly property bool mirrorVisible: mirrorOverlay.isVisible
-
-    Process { id: clearRegionProc }
-
-    Process {
-        id: slurpProc
-        onExited: (code) => {
-            Logger.i("ScreenToolkit", "slurpProc (systemd-run) exited: " + code)
-            if (code !== 0) {
-                slurpPollTimer.stop()
-                root.isRunning = false
-                root.activeTool = ""
-            }
-        }
-    }
-
-    property int _slurpPollCount: 0
-
-    // FIX: added busy guard — prevents slurpCheckProc.exec() stacking if previous
-    // poll hasn't returned yet (was possible at 200ms interval under load)
-    Process {
-        id: slurpCheckProc
-        property bool busy: false
-        stdout: StdioCollector {}
-        onExited: (code) => {
-            busy = false
-            if (code !== 0) return
-            var result = slurpCheckProc.stdout.text.trim()
-            Logger.i("ScreenToolkit", "slurpCheck: " + result)
-            slurpPollTimer.stop()
-            root._slurpPollCount = 0
-            if (result === "cancel") {
-                root.isRunning = false
-                root.activeTool = ""
-            } else if (result === "ok") {
-                _dispatchPendingTool()
-            }
-        }
-    }
 
     // ── Timers ────────────────────────────────────────────────
 
@@ -376,7 +396,10 @@ Item {
         onTriggered: {
             Logger.i("ScreenToolkit", "launchSlurp fired for: " + root.pendingTool)
             clearRegionProc.exec({
-                command: ["bash", "-c", "rm -f " + root.regionFile + " " + root.regionFile + ".cancel " + root.regionFile + ".tmp"]
+                command: ["bash", "-c",
+                    "rm -f " + root.regionFile +
+                    " " + root.regionFile + ".cancel" +
+                    " " + root.regionFile + ".tmp"]
             })
             slurpProc.exec({
                 command: [
@@ -395,6 +418,10 @@ Item {
         }
     }
 
+    property int _slurpPollCount: 0
+
+    // Poll cap: 300 × 200 ms = 60 s max wait. Prevents zombie isRunning state
+    // if the user walks away without completing or cancelling the selection.
     Timer {
         id: slurpPollTimer
         interval: 200; repeat: true
@@ -405,12 +432,9 @@ Item {
                 root._slurpPollCount = 0
                 root.isRunning = false
                 root.activeTool = ""
-                Logger.i("ScreenToolkit", "slurp timed out")
+                Logger.i("ScreenToolkit", "slurp timed out after 60s")
                 return
             }
-            // FIX: skip if previous check hasn't returned yet — prevents exec() stacking
-            if (slurpCheckProc.busy) return
-            slurpCheckProc.busy = true
             slurpCheckProc.exec({
                 command: [
                     "bash", "-c",
@@ -423,6 +447,9 @@ Item {
             })
         }
     }
+
+    // ── Tool launch timers ────────────────────────────────────
+    // Each fires after the slurp poll confirms a region is ready.
 
     Timer {
         id: launchOcr
@@ -475,9 +502,6 @@ Item {
         id: launchAnnotate
         interval: 50; repeat: false
         onTriggered: {
-            // FIX: reset both flags before launching the two concurrent procs
-            root._annotateImgDone = false
-            root._annotateRegionDone = false
             annotateRegionProc.exec({
                 command: ["bash", "-c", "cat " + root.regionFile + " 2>/dev/null"]
             })
@@ -500,7 +524,7 @@ Item {
                     "bash", "-c",
                     "REGION=$(cat " + root.regionFile + ") || exit 1; " +
                     "FILE=/tmp/screen-toolkit-pin-$(date +%s%3N).png; " +
-                    "grim -g \"$REGION\" \"$FILE\" 2>/dev/null || exit 1; " +
+                    "grim -s 2 -g \"$REGION\" \"$FILE\" 2>/dev/null || exit 1; " +
                     "WH=$(echo \"$REGION\" | cut -d' ' -f2); " +
                     "echo \"$FILE|$WH\"; " +
                     _rmRegion()
@@ -516,10 +540,8 @@ Item {
             paletteProc.exec({
                 command: [
                     "bash", "-c",
-                    "REGION=$(cat " + root.regionFile + ") || exit 1; " +
-                    "FILE=/tmp/screen-toolkit-palette.png; " +
-                    "grim -g \"$REGION\" \"$FILE\" 2>/dev/null || exit 1; " +
-                    "magick \"$FILE\" +dither -colors 8 -unique-colors txt:- 2>/dev/null " +
+                    _grimRegionCmd("/tmp/screen-toolkit-palette.png") + " || exit 1; " +
+                    "magick /tmp/screen-toolkit-palette.png +dither -colors 8 -unique-colors txt:- 2>/dev/null " +
                     "| grep -v '^#' | grep -oP '#[0-9a-fA-F]{6}' | head -8; " +
                     _rmRegion()
                 ]
@@ -531,39 +553,26 @@ Item {
         id: launchRecord
         interval: 50; repeat: false
         onTriggered: {
+            // Uses a declared Process (recordRegionProc) — no dynamic allocation.
             recordRegionProc.exec({
-                command: ["bash", "-c", "cat " + root.regionFile + " && " + _rmRegion()]
+                command: ["bash", "-c", "cat " + root.regionFile + " && rm -f " + root.regionFile]
             })
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────
+    // ── Internal helpers ──────────────────────────────────────
 
-    function _grimRegionCmd(outFile) {
-        return "REGION=$(cat " + regionFile + ") || exit 1; " +
-               "grim -g \"$REGION\" " + outFile + " 2>/dev/null"
-    }
-
-    function _rmRegion() {
-        return "rm -f " + regionFile
-    }
-
-    function _runSlurpTool(tool) {
-        if (root.isRunning) return
-        root.pendingTool = tool
-        root.isRunning = true
-        closeThenLaunch(launchSlurp)
-    }
-
+    // Dispatches to the correct launch timer once slurp confirms a region.
+    // Centralises the if/else chain that was previously duplicated in slurpCheckProc.
     function _dispatchPendingTool() {
         switch (root.pendingTool) {
-            case "ocr":      launchOcr.start();      break
-            case "qr":       launchQr.start();       break
-            case "lens":     launchLens.start();     break
+            case "ocr":      launchOcr.start();     break
+            case "qr":       launchQr.start();      break
+            case "lens":     launchLens.start();    break
             case "annotate": launchAnnotate.start(); break
-            case "pin":      launchPin.start();      break
-            case "palette":  launchPalette.start();  break
-            case "record":   launchRecord.start();   break
+            case "pin":      launchPin.start();     break
+            case "palette":  launchPalette.start(); break
+            case "record":   launchRecord.start();  break
             default:
                 Logger.w("ScreenToolkit", "unknown pendingTool: " + root.pendingTool)
                 root.isRunning = false
@@ -601,7 +610,9 @@ Item {
         })
     }
 
-    // ── Tool Runners ──────────────────────────────────────────
+    // ── Public tool runners ───────────────────────────────────
+    // These keep the same names/signatures as before so Panel.qml and
+    // the IpcHandler below need zero changes.
 
     function runColorPicker() {
         if (root.isRunning) return
@@ -624,18 +635,18 @@ Item {
         _runSlurpTool("ocr")
     }
 
-    function runQr()       { _runSlurpTool("qr")      }
-    function runLens()     { _runSlurpTool("lens")     }
-    function runAnnotate() { _runSlurpTool("annotate") }
-    function runPin()      { _runSlurpTool("pin")      }
-
+    function runQr()      { _runSlurpTool("qr")       }
+    function runLens()    { _runSlurpTool("lens")      }
+    function runAnnotate(){ _runSlurpTool("annotate")  }
     function runPalette() {
+        if (root.isRunning) return
         if (pluginApi) {
             pluginApi.pluginSettings.paletteColors = []
             pluginApi.saveSettings()
         }
         _runSlurpTool("palette")
     }
+    function runPin()     { _runSlurpTool("pin")       }
 
     function runMeasure() {
         if (root.isRunning) return
@@ -652,7 +663,9 @@ Item {
         _runSlurpTool("record")
     }
 
-    function runMirror() { mirrorOverlay.toggle() }
+    function runMirror() {
+        mirrorOverlay.toggle()
+    }
 
     function detectCapabilities() {
         root._detectedLangs = []

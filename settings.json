@@ -4,16 +4,24 @@
     "eng"
   ],
   "transAvailable": true,
-  "resultHex": "",
-  "resultRgb": "",
-  "resultHsv": "",
-  "resultHsl": "",
-  "colorCapturePath": "",
-  "colorHistory": [],
-  "paletteColors": [],
+  "resultHex": "#414B5B",
+  "resultRgb": "rgb(65, 75, 91)",
+  "resultHsv": "hsv(217, 29%, 36%)",
+  "resultHsl": "hsl(217, 17%, 31%)",
+  "colorCapturePath": "/tmp/screen-toolkit-colorpicker.png",
+  "colorHistory": [
+    "#414B5B"
+  ],
+  "paletteColors": [
+    "#314451",
+    "#606C70",
+    "#957891",
+    "#AAA297",
+    "#D1ADAE"
+  ],
   "ocrResult": "",
   "ocrCapturePath": "",
-  "translateResult": "INFO gml: [208260318-195553]\nE_1291(Bx7fea90fcOfan)\n\nINFO gml: [26268318-195556]\nINFO gml: [26268318-195556]\nINFO qmi: [20260310-195559]\nINFO gml: [26268310-195609]\nINFO gml: [26268310-195689]\nINFO gml: [26268318-195609]\n)\n\nINFO gml: [26268318-195609]\nINFO gml: [26268318-195611]\nYPE_1291(@x7fea98fcofan)\nINFO aml: [20260310-1956111\n\nScreenToolkit\n\nScreenToolkit\nScreenToolkit\nScreenToolkit\nPluginPanelslo\nScreenToolkit\nScreenToolkit\n\nPluginPanelslo\nScreenToolkit\n\nB 5T\n\ntriggerFocused: tool=record isRunning=false main=Main_QMLTY\n\nlaunchslurp wurde ausgelöst für: Datensatz\nslurpProc (systemd-run) beendet: 8\n\nslurpCheck: ok\n\nLadepanel für Plugin: screen-toolkit in Steckplatz 1\n\nPanel geladen –pluginApi=null main=null\n\nPluginApi-Set, mainInstance=Main_QMLTYPE_1291(Bx7fea98fcofa\n\nPanel geladen für: screen-toolkit\ntriggerFocused: tool=annotate isRunning=false main=Hain_QML\n\n1aunchsSlurp wurde ausgelöst für: kommentieren",
+  "translateResult": "ANFU qml: L20200511-215425]\nQMLTYPE_1328(8x7fe67e374b00)\n\nscreenfoolkit\n\npluginApl set, malnlnste\n\nINFO qmi: [20268311-215423] PluginPanelSlo Panel loaded for: screer\n\nINFO qmi: [20268311-215425]\n\nScreenToolkit\n\ntriggerFocused: tool=anr\n\nunning=false main=Main_QMLTYPE_1328(Bx7fe67e374b60)\n\nINFO qmi: [20268311-215425]\nINFO qmi: [20268311-215425]\nINFO qmi: [20268311-215428]\nINFO qmi: [20268311-215428]\n\nScreenToolkit\nScreenToolkit\nScreenToolkit\nScreenToolkit\n\nlaunchslurp fired for:\nslurpProc exited: 8\nslurpCheck: ok\nannotate done, region=6:",
   "selectedOcrLang": "eng",
   "qrResult": "https://idemia-mobile-id.com/testqr-success",
   "qrCapturePath": ""

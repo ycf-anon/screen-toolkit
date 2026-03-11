@@ -1,13 +1,18 @@
 {
   "id": "screen-toolkit",
   "name": "Screen Toolkit",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "minNoctaliaVersion": "4.5.0",
   "author": "ycf-anon",
   "license": "MIT",
   "repository": "https://github.com/ycf-anon/screen-toolkit",
-  "description": "Screen Toolkit: a panel with tools like color picker, OCR, QR scanner, annotate, measure, pin, palette, recorder, and webcam mirror.",
-  "tags": ["Panel", "Bar", "Utility", "System"],
+  "description": "A set of screen tools: color picker, annotate, record, pin, OCR, QR scanner, palette, measure, and webcam mirror.",
+  "tags": [
+    "Panel",
+    "Bar",
+    "Utility",
+    "System"
+  ],
   "entryPoints": {
     "main": "Main.qml",
     "barWidget": "BarWidget.qml",

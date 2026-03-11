@@ -74,7 +74,7 @@ Item {
                     : root.audioInput
                         ? " --audio=$(pactl get-default-source 2>/dev/null)"
                         : "") +
-            " -f " + root.mp4Path + " 2>/dev/null"
+            " -c libx264 -p crf=0 -p preset=ultrafast -p tune=zerolatency -f " + root.mp4Path + " 2>/dev/null"
         ]})
     }
 
@@ -140,7 +140,10 @@ Item {
                     root.gifPath = "/tmp/screen-toolkit-record-" + ts + ".mp4"
                     gifConvertProc.exec({ command: [
                         "bash", "-c",
-                        "mv " + root.mp4Path + " " + root.gifPath + " && " +
+                        "ffmpeg -y -i " + root.mp4Path +
+                        " -c:v libx264 -crf 16 -preset veryslow -pix_fmt yuv420p" +
+                        " -movflags +faststart " + root.gifPath + " 2>/dev/null && " +
+                        "rm -f " + root.mp4Path + " && " +
                         "ffmpeg -y -ss 0 -i " + root.gifPath +
                         " -frames:v 1 /tmp/screen-toolkit-record-preview.png 2>/dev/null; " +
                         "exit 0"
@@ -152,9 +155,9 @@ Item {
                         "bash", "-c",
                         "mkdir -p " + framesDir + " && " +
                         "ffmpeg -y -i " + root.mp4Path +
-                        " -vf 'fps=10,scale=trunc(min(iw\\,854)/2)*2:-2' " +
+                        " -vf 'fps=20,scale=trunc(iw/2)*2:-2' " +
                         framesDir + "/frame%04d.png 2>/dev/null && " +
-                        "gifski --fps 10 --quality 90 -o " + root.gifPath +
+                        "gifski --fps 20 --quality 100 -o " + root.gifPath +
                         " " + framesDir + "/frame*.png 2>/dev/null && " +
                         "rm -rf " + framesDir + " " + root.mp4Path
                     ]})

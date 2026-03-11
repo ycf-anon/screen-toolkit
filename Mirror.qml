@@ -14,14 +14,11 @@ Item {
     function hide()   { isVisible = false }
     function toggle() { isVisible = !isVisible }
 
-    // FIX: shared state lifted to root — one mirror, one camera stream,
-    // position/size/flip shared across all delegates so only the primary
-    // screen delegate is active and the rest are transparent passthroughs.
     property bool isSquare:   true
     property bool isFlipped:  true
     property int  currentWidth:  300
     property int  currentHeight: 300
-    property int  xPos: -1   // -1 = uninitialised, set on first show
+    property int  xPos: -1
     property int  yPos: -1
 
     Variants {
@@ -31,7 +28,6 @@ Item {
             id: win
             required property ShellScreen modelData
 
-            // FIX: only the primary screen hosts the actual mirror
             readonly property bool isPrimary: modelData === Quickshell.screens[0]
 
             screen: modelData
@@ -45,8 +41,8 @@ Item {
             WlrLayershell.namespace: "noctalia-mirror"
 
             onVisibleChanged: {
-                // Initialise position to top-right on first show
-                if (visible && isPrimary && root.xPos === -1) {
+                // FIX: guard against screen.width === 0 race on first show
+                if (visible && isPrimary && root.xPos === -1 && screen.width > 0) {
                     root.xPos = screen.width  - root.currentWidth  - 24
                     root.yPos = Math.round((screen.height - root.currentHeight) / 2)
                 }
@@ -57,12 +53,8 @@ Item {
                               resizeTR.pressed || resizeTL.pressed)
 
             Item { id: fullMask; anchors.fill: parent }
+            mask: Region { item: win.isInteracting ? fullMask : container }
 
-            mask: Region {
-                item: win.isInteracting ? fullMask : container
-            }
-
-            // ── Camera — only active on primary screen ──
             MediaDevices { id: mediaDevices }
 
             Rectangle {
@@ -80,8 +72,6 @@ Item {
                     id: captureSession
                     camera: Camera {
                         id: camera
-                        // FIX: only activate camera on the primary delegate —
-                        // prevents N simultaneous camera streams on multi-monitor
                         active: win.visible && win.isPrimary
                         cameraDevice: mediaDevices.videoInputs.length > 0
                             ? mediaDevices.videoInputs[0]
@@ -127,66 +117,79 @@ Item {
                     onPositionChanged: mouse => {
                         if (!pressed) return
                         var p = mapToItem(null, mouse.x, mouse.y)
-                        // FIX: clamp so the mirror can't be dragged fully off-screen
                         root.xPos = Math.max(0, Math.min(win.screen.width  - root.currentWidth,  startX + (p.x - startPoint.x)))
                         root.yPos = Math.max(0, Math.min(win.screen.height - root.currentHeight, startY + (p.y - startPoint.y)))
                     }
                 }
 
                 // ── Controls ────────────────────────────
-                Row {
+                // FIX: pill background so controls are always visible regardless of video content
+                Rectangle {
                     anchors.bottom: parent.bottom
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottomMargin: Style.marginM
-                    spacing: Style.marginS
+                    width: ctrlRow.implicitWidth + Style.marginM * 2
+                    height: 44
+                    radius: 22
+                    color: Qt.rgba(0, 0, 0, 0.55)
                     z: 3
                     opacity: containerHover.hovered ? 1.0 : 0.0
                     Behavior on opacity { NumberAnimation { duration: 150 } }
 
-                    // Square/Wide toggle
-                    Rectangle {
-                        width: 36; height: 36; radius: 18
-                        color: Qt.rgba(0, 0, 0, 0.65)
-                        NIcon { anchors.centerIn: parent; icon: root.isSquare ? "arrows-maximize" : "crop"; color: "white" }
-                        MouseArea {
-                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.isSquare = !root.isSquare
-                                root.currentWidth  = root.isSquare ? 300 : 480
-                                root.currentHeight = 300
-                                // Re-clamp position after size change
-                                root.xPos = Math.max(0, Math.min(win.screen.width  - root.currentWidth,  root.xPos))
-                                root.yPos = Math.max(0, Math.min(win.screen.height - root.currentHeight, root.yPos))
+                    Row {
+                        id: ctrlRow
+                        anchors.centerIn: parent
+                        spacing: Style.marginS
+
+                        // Square/Wide toggle
+                        Rectangle {
+                            width: 32; height: 32; radius: 16
+                            color: sqHover.containsMouse ? Qt.rgba(1,1,1,0.2) : "transparent"
+                            NIcon { anchors.centerIn: parent; icon: root.isSquare ? "arrows-maximize" : "crop"; color: "white" }
+                            MouseArea {
+                                id: sqHover
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
+                                onClicked: {
+                                    root.isSquare = !root.isSquare
+                                    // FIX: wide uses 16:9 ratio, square locks to 1:1 — both from current width
+                                    root.currentHeight = root.isSquare
+                                        ? root.currentWidth
+                                        : Math.round(root.currentWidth * 9 / 16)
+                                    // Re-clamp position after size change
+                                    root.xPos = Math.max(0, Math.min(win.screen.width  - root.currentWidth,  root.xPos))
+                                    root.yPos = Math.max(0, Math.min(win.screen.height - root.currentHeight, root.yPos))
+                                }
+                                onEntered: TooltipService.show(parent, root.isSquare ? "Switch to wide (16:9)" : "Switch to square")
+                                onExited:  TooltipService.hide()
                             }
-                            onEntered: TooltipService.show(parent, root.isSquare ? "Switch to wide" : "Switch to square")
-                            onExited:  TooltipService.hide()
                         }
-                    }
 
-                    // Flip toggle
-                    Rectangle {
-                        width: 36; height: 36; radius: 18
-                        color: root.isFlipped ? Color.mPrimary : Qt.rgba(0, 0, 0, 0.65)
-                        NIcon { anchors.centerIn: parent; icon: "flip-horizontal"; color: "white" }
-                        MouseArea {
-                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: root.isFlipped = !root.isFlipped
-                            onEntered: TooltipService.show(parent, "Flip camera")
-                            onExited:  TooltipService.hide()
+                        // Flip toggle
+                        Rectangle {
+                            width: 32; height: 32; radius: 16
+                            color: root.isFlipped ? Qt.rgba(1,1,1,0.25) : (flipHover.containsMouse ? Qt.rgba(1,1,1,0.15) : "transparent")
+                            NIcon { anchors.centerIn: parent; icon: "flip-horizontal"; color: "white" }
+                            MouseArea {
+                                id: flipHover
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
+                                onClicked: root.isFlipped = !root.isFlipped
+                                onEntered: TooltipService.show(parent, root.isFlipped ? "Unflip camera" : "Flip camera")
+                                onExited:  TooltipService.hide()
+                            }
                         }
-                    }
 
-                    // Close
-                    Rectangle {
-                        width: 36; height: 36; radius: 18
-                        color: closeHover.containsMouse ? (Color.mError || "#f44336") : Qt.rgba(0, 0, 0, 0.65)
-                        NIcon { anchors.centerIn: parent; icon: "x"; color: "white" }
-                        MouseArea {
-                            id: closeHover; anchors.fill: parent
-                            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: root.hide()
-                            onEntered: TooltipService.show(parent, "Close")
-                            onExited:  TooltipService.hide()
+                        // Close
+                        Rectangle {
+                            width: 32; height: 32; radius: 16
+                            color: closeHover.containsMouse ? Qt.rgba(1,1,1,0.2) : "transparent"
+                            NIcon { anchors.centerIn: parent; icon: "x"; color: "white" }
+                            MouseArea {
+                                id: closeHover; anchors.fill: parent
+                                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: root.hide()
+                                onEntered: TooltipService.show(parent, "Close")
+                                onExited:  TooltipService.hide()
+                            }
                         }
                     }
                 }
@@ -215,31 +218,27 @@ Item {
                         if (!pressed) return
                         var p  = mapToItem(null, mouse.x, mouse.y)
                         var dx = p.x - startPt.x
-                        // FIX: track dy for top-corner handles so vertical dragging
-                        // also resizes correctly when approaching from above
                         var dy = p.y - startPt.y
-                        var nw = startW; var nh = startH
+                        var nw = startW
                         var nx = startX; var ny = startY
 
-                        if      (mode === 0) { nw = Math.max(150, startW + dx) }
-                        else if (mode === 1) { nw = Math.max(150, startW - dx); nx = startX + (startW - nw) }
-                        else if (mode === 2) {
-                            // TR: use whichever axis moved more so diagonal drag works naturally
-                            var dxAbs = Math.abs(dx), dyAbs = Math.abs(dy)
-                            nw = Math.max(150, dxAbs >= dyAbs ? startW + dx : startW - dy)
-                        }
-                        else if (mode === 3) {
-                            // TL: same — pick dominant axis
-                            var dxAbs = Math.abs(dx), dyAbs = Math.abs(dy)
-                            nw = Math.max(150, dxAbs >= dyAbs ? startW - dx : startW - dy)
-                            nx = startX + (startW - nw)
-                        }
+                        // FIX: clean resize logic — each corner uses correct axis
+                        if      (mode === 0) { nw = Math.max(150, startW + dx) }          // BR: drag right = wider
+                        else if (mode === 1) { nw = Math.max(150, startW - dx); nx = startX + (startW - nw) } // BL: drag left = wider
+                        else if (mode === 2) { nw = Math.max(150, startW + dx) }          // TR: drag right = wider
+                        else if (mode === 3) { nw = Math.max(150, startW - dx); nx = startX + (startW - nw) } // TL: drag left = wider
 
-                        nh = root.isSquare ? nw : Math.round(nw * startH / Math.max(startW, 1))
+                        // FIX: height respects aspect ratio — square=1:1, wide=16:9
+                        var nh = root.isSquare ? nw : Math.round(nw * 9 / 16)
+                        nh = Math.max(100, nh)  // FIX: minimum height guard
+
+                        // FIX: top handles move Y to keep top edge pinned
                         if (mode === 2 || mode === 3) ny = startY + (startH - nh)
 
-                        root.currentWidth  = nw; root.currentHeight = nh
-                        root.xPos = Math.max(0, nx); root.yPos = Math.max(0, ny)
+                        root.currentWidth  = nw
+                        root.currentHeight = nh
+                        root.xPos = Math.max(0, nx)
+                        root.yPos = Math.max(0, ny)
                     }
 
                     Rectangle {

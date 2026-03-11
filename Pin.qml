@@ -55,101 +55,64 @@ Variants {
                 readonly property real pinH: pinVariants.pinField(myIdx, "h") || 300
 
                 x: (parent.width  - pinW)  / 2 + myIdx * 24
-                y: (parent.height - pinH - 34) / 2 + myIdx * 24
+                y: (parent.height - pinH)   / 2 + myIdx * 24
                 width:  pinW
-                height: pinH + 34
+                height: pinH
+
+                // Hover state for showing close button
+                property bool _hovered: false
 
                 Rectangle {
                     id: pinCard
                     anchors.fill: parent
-
-                    property real imgOpacity: 1.0
-
-                    radius: Style.radiusM
-                    color:  Color.mSurface
-                    border.color: Color.mOutline
+                    radius: Style.radiusL
+                    color: Color.mSurface
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
                     border.width: 1
+                    clip: true
 
-                    // ── Toolbar ───────────────────────────────
-                    Rectangle {
-                        id: toolbar
-                        anchors { top: parent.top; left: parent.left; right: parent.right }
-                        height: 34
-                        color: Color.mSurfaceVariant
-                        radius: Style.radiusM
-
-                        Rectangle {
-                            anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                            height: Style.radiusM
-                            color: parent.color
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            drag.target: pinDelegate
-                            drag.minimumX: -pinDelegate.width + 40
-                            drag.maximumX: pinDelegate.parent ? pinDelegate.parent.width - 40 : 9999
-                            drag.minimumY: 0
-                            drag.maximumY: pinDelegate.parent ? pinDelegate.parent.height - 40 : 9999
-                            cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                            propagateComposedEvents: true
-                        }
-
-                        NIcon {
-                            anchors { left: parent.left; leftMargin: Style.marginS; verticalCenter: parent.verticalCenter }
-                            icon: "grip-vertical"
-                            color: Color.mOnSurfaceVariant
-                            scale: 0.85
-                        }
-
-                        Row {
-                            anchors { right: parent.right; rightMargin: Style.marginS; verticalCenter: parent.verticalCenter }
-                            spacing: 4
-
-                            // Opacity toggle
-                            Rectangle {
-                                width: 26; height: 26; radius: Style.radiusS
-                                color: opBtn.containsMouse ? Color.mPrimary : Color.mSurface
-                                NText {
-                                    anchors.centerIn: parent
-                                    text: pinCard.imgOpacity < 1.0 ? "100" : "50"
-                                    pointSize: Style.fontSizeXS
-                                    color: opBtn.containsMouse ? Color.mOnPrimary : Color.mOnSurface
-                                }
-                                MouseArea {
-                                    id: opBtn; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: pinCard.imgOpacity = (pinCard.imgOpacity < 1.0) ? 1.0 : 0.4
-                                    onEntered: TooltipService.show(opBtn, pinCard.imgOpacity < 1.0 ? "Restore opacity" : "Reduce opacity")
-                                    onExited: TooltipService.hide()
-                                }
-                            }
-
-                            // Close
-                            Rectangle {
-                                width: 26; height: 26; radius: Style.radiusS
-                                color: closeBtn.containsMouse ? Color.mSurfaceVariant : Color.mSurface
-                                NIcon {
-                                    anchors.centerIn: parent; icon: "x"; scale: 0.8
-                                    color: closeBtn.containsMouse ? Color.mError : Color.mOnSurface
-                                }
-                                MouseArea {
-                                    id: closeBtn; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: pinVariants.removePin(pinDelegate.myIdx)
-                                    onEntered: TooltipService.show(closeBtn, "Close")
-                                    onExited: TooltipService.hide()
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Image ─────────────────────────────────
+                    // ── Image fills entire card ────────────────
                     Image {
-                        anchors { top: toolbar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
+                        anchors.fill: parent
                         source: pinDelegate.pinImgPath !== "" ? "file://" + pinDelegate.pinImgPath : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
-                        opacity: pinCard.imgOpacity
+                    }
+
+                    // ── Drag + hover detection ─────────────────
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        drag.target: pinDelegate
+                        drag.minimumX: -pinDelegate.width + 40
+                        drag.maximumX: pinDelegate.parent ? pinDelegate.parent.width - 40 : 9999
+                        drag.minimumY: 0
+                        drag.maximumY: pinDelegate.parent ? pinDelegate.parent.height - 40 : 9999
+                        cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        onEntered: pinDelegate._hovered = true
+                        onExited: { if (!closeBtn.containsMouse) pinDelegate._hovered = false }
+                    }
+
+                    // ── Close button — top right on hover ──────
+                    Rectangle {
+                        anchors { top: parent.top; right: parent.right; margins: 8 }
+                        width: 24; height: 24; radius: 12
+                        color: closeBtn.containsMouse ? Qt.rgba(0, 0, 0, 0.8) : Qt.rgba(0, 0, 0, 0.5)
+                        visible: pinDelegate._hovered || closeBtn.containsMouse
+                        opacity: pinDelegate._hovered ? 1.0 : 0.0
                         Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                        NIcon {
+                            anchors.centerIn: parent; icon: "x"; scale: 0.75
+                            color: "white"
+                        }
+                        MouseArea {
+                            id: closeBtn; anchors.fill: parent; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: pinVariants.removePin(pinDelegate.myIdx)
+                            onEntered: { pinDelegate._hovered = true; TooltipService.show(closeBtn, "Close") }
+                            onExited: { pinDelegate._hovered = false; TooltipService.hide() }
+                        }
                     }
                 }
             }

@@ -262,10 +262,12 @@ Item {
                         root.focusedTool = (root.focusedTool + 1) % 10
                         event.accepted = true
                     } else if (event.key === Qt.Key_Up) {
-                        root.focusedTool = (root.focusedTool + 5) % 10
+                        // FIX: Up moves from row 2 → row 1; clamp if already on row 1
+                        root.focusedTool = root.focusedTool >= 5 ? root.focusedTool - 5 : root.focusedTool
                         event.accepted = true
                     } else if (event.key === Qt.Key_Down) {
-                        root.focusedTool = (root.focusedTool + 5) % 10
+                        // FIX: Down moves from row 1 → row 2; clamp if already on row 2
+                        root.focusedTool = root.focusedTool < 5 ? root.focusedTool + 5 : root.focusedTool
                         event.accepted = true
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                         root.triggerFocused()
